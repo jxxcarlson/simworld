@@ -1,4 +1,4 @@
-module Conway exposing (State(..), occupied, occupy, randomCellGrid, spot, toggleState, updateCells)
+module Conway exposing (State(..), changeState, emptyGrid, numberOccupied, spot, updateCells)
 
 import Array exposing (Array)
 import CellGrid exposing (CellGrid(..), CellType(..), cellAtMatrixIndex)
@@ -7,38 +7,36 @@ import Random
 
 
 type State
-    = Occupied
+    = Crop
+    | City
+    | Nature
     | Unoccupied
+
+
+emptyGrid : Int -> Int -> CellGrid State
+emptyGrid rows cols =
+    CellGrid.fromList rows cols (List.repeat (rows * cols) Unoccupied)
+        |> Maybe.withDefault CellGrid.empty
 
 
 updateCells : CellGrid State -> CellGrid State
 updateCells cellGrid =
-    CellGrid.transform nextValue cellGrid
+    cellGrid
 
 
-randomCellGrid : Int -> Float -> ( Int, Int ) -> CellGrid State
-randomCellGrid seed density ( r, c ) =
-    CellGrid ( r, c ) (Array.fromList <| cellSequence density (r * c) seed ( 0, 1 ))
+vacate : ( Int, Int ) -> CellGrid State -> CellGrid State
+vacate ( i, j ) cg =
+    CellGrid.setValue cg ( i, j ) Unoccupied
 
 
-occupy : ( Int, Int ) -> CellGrid State -> CellGrid State
-occupy ( i, j ) cg =
-    CellGrid.setValue cg ( i, j ) Occupied
-
-
-toggleState : ( Int, Int ) -> CellGrid State -> CellGrid State
-toggleState ( i, j ) cg =
+changeState : State -> ( Int, Int ) -> CellGrid State -> CellGrid State
+changeState newState ( i, j ) cg =
     case CellGrid.cellAtMatrixIndex ( i, j ) cg of
         Nothing ->
             cg
 
         Just state ->
-            case state of
-                Unoccupied ->
-                    CellGrid.setValue cg ( i, j ) Occupied
-
-                Occupied ->
-                    CellGrid.setValue cg ( i, j ) Unoccupied
+            CellGrid.setValue cg ( i, j ) newState
 
 
 spot : ( Int, Int ) -> Float -> State -> CellGrid State -> CellGrid State
@@ -63,22 +61,6 @@ spot ( centerI, centerJ ) radius state cg =
     CellGrid.mapWithIndex cellTransformer cg
 
 
-cellSequence : Float -> Int -> Int -> ( Float, Float ) -> List State
-cellSequence density n seed ( a, b ) =
-    cellSequence_ n (makeSeed seed) ( a, b )
-        |> Tuple.first
-        |> List.map (chooseState density)
-
-
-chooseState : Float -> Float -> State
-chooseState p rn =
-    if rn < p then
-        Occupied
-
-    else
-        Unoccupied
-
-
 gen : Int -> ( Float, Float ) -> Random.Generator (List Float)
 gen n ( a, b ) =
     Random.list n (Random.float a b)
@@ -92,34 +74,6 @@ makeSeed k =
 cellSequence_ : Int -> Random.Seed -> ( Float, Float ) -> ( List Float, Random.Seed )
 cellSequence_ n seed ( a, b ) =
     Random.step (gen n ( a, b )) seed
-
-
-nextValue : ( Int, Int ) -> CellGrid State -> State
-nextValue ( i, j ) cellGrid =
-    case cellAtMatrixIndex ( i, j ) cellGrid of
-        Nothing ->
-            Unoccupied
-
-        Just state ->
-            let
-                nOccupied =
-                    occupiedNeighbors cellGrid ( i, j )
-            in
-            case ( state, nOccupied ) of
-                ( Unoccupied, 3 ) ->
-                    Occupied
-
-                ( Unoccupied, _ ) ->
-                    Unoccupied
-
-                ( Occupied, 2 ) ->
-                    Occupied
-
-                ( Occupied, 3 ) ->
-                    Occupied
-
-                ( Occupied, _ ) ->
-                    Unoccupied
 
 
 neighborFilter : CellGrid u -> ( Int, Int ) -> Bool
@@ -148,15 +102,22 @@ neighbors cg ( row, col ) =
         |> Maybe.Extra.values
 
 
-occupied : CellGrid State -> Int
-occupied (CellGrid ( _, _ ) cells) =
+numberVacant : CellGrid State -> Int
+numberVacant (CellGrid ( _, _ ) cells) =
     cells
-        |> Array.filter (\state -> state == Occupied)
+        |> Array.filter (\state -> state == Unoccupied)
+        |> Array.length
+
+
+numberOccupied : CellGrid State -> Int
+numberOccupied (CellGrid ( _, _ ) cells) =
+    cells
+        |> Array.filter (\state -> state /= Unoccupied)
         |> Array.length
 
 
 occupiedNeighbors : CellGrid State -> ( Int, Int ) -> Int
 occupiedNeighbors cg ( row, col ) =
     neighbors cg ( row, col )
-        |> List.filter (\state -> state == Occupied)
+        |> List.filter (\state -> state /= Unoccupied)
         |> List.length

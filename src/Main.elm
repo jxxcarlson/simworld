@@ -19,11 +19,12 @@ import Html exposing (Html)
 import Html.Events.Extra.Mouse as Mouse
 import Random
 import Time exposing (Posix)
+import TypedSvg.Types exposing (Fill(..))
 
 
 tickInterval : Float
 tickInterval =
-    333
+    5000
 
 
 initialDensity =
@@ -35,7 +36,7 @@ initialSeed =
 
 
 gridWidth =
-    100
+    6
 
 
 gridDisplayWidth =
@@ -69,6 +70,7 @@ type alias Model =
     , randomPair : ( Int, Int )
     , cellMap : CellGrid State
     , message : String
+    , chosenState : State
     }
 
 
@@ -94,6 +96,10 @@ type Msg
     | Reset
     | NewPair ( Int, Int )
     | CellGrid CellGrid.Render.Msg
+    | ChooseCity
+    | ChooseCrop
+    | ChooseNature
+    | ChooseUnoccupied
 
 
 type alias Flags =
@@ -115,6 +121,7 @@ init flags =
       , randomPair = ( 0, 0 )
       , cellMap = initialCellGrid initialSeed initialDensity
       , message = "Click to make cell."
+      , chosenState = City
       }
     , Cmd.none
     )
@@ -122,7 +129,7 @@ init flags =
 
 initialCellGrid : Int -> Float -> CellGrid State
 initialCellGrid seed density =
-    Conway.randomCellGrid seed density ( gridWidth, gridWidth )
+    Conway.emptyGrid gridWidth gridWidth
 
 
 subscriptions model =
@@ -159,8 +166,6 @@ update msg model =
                 True ->
                     ( { model
                         | counter = model.counter + 1
-                        , cellMap = Conway.updateCells model.cellMap |> generateNewLife model
-                        , currentDensity = currentDensity model
                       }
                     , Random.generate NewPair generatePair
                     )
@@ -205,24 +210,22 @@ update msg model =
                     in
                     ( { model
                         | message = message
-                        , cellMap = Conway.toggleState ( i, j ) model.cellMap
+                        , cellMap = Conway.changeState model.chosenState ( i, j ) model.cellMap
                       }
                     , Cmd.none
                     )
 
+        ChooseCity ->
+            ( { model | chosenState = City }, Cmd.none )
 
-generateNewLife : Model -> CellGrid State -> CellGrid State
-generateNewLife model cg =
-    case model.currentDensity < lowDensityThreshold of
-        False ->
-            cg
+        ChooseCrop ->
+            ( { model | chosenState = Crop }, Cmd.none )
 
-        True ->
-            let
-                ( i, j ) =
-                    model.randomPair
-            in
-            Conway.occupy ( i, j ) cg
+        ChooseNature ->
+            ( { model | chosenState = Nature }, Cmd.none )
+
+        ChooseUnoccupied ->
+            ( { model | chosenState = Unoccupied }, Cmd.none )
 
 
 generatePair =
@@ -245,11 +248,12 @@ mainColumn model =
     column mainColumnStyle
         [ column [ centerX, spacing 20 ]
             [ title "Conway's Game of Life"
-            , el [ centerX ]
-                (CellGrid.Render.renderAsHtml gridDisplayWidth gridDisplayWidth cellrenderer model.cellMap
+            , row [ centerX, spacing 40 ]
+                [ CellGrid.Render.renderAsHtml gridDisplayWidth gridDisplayWidth cellrenderer model.cellMap
                     |> Element.html
                     |> Element.map CellGrid
-                )
+                , palette model
+                ]
             , row [ spacing 18 ]
                 [ resetButton
                 , runButton model
@@ -268,6 +272,57 @@ mainColumn model =
         ]
 
 
+palette : Model -> Element Msg
+palette model =
+    column [ spacing 10, paddingXY 40 0 ]
+        [ chooseCityButton model
+        , chooseCropButton model
+        , chooseNatureButton model
+        , chooseUnoccupiedButton model
+        ]
+
+
+chooseCityButton : Model -> Element Msg
+chooseCityButton model =
+    Input.button (paletButtonStyle 0 0 1)
+        { onPress = Just ChooseCity
+        , label = el [ centerX, centerY ] (text <| "City")
+        }
+
+
+chooseCropButton : Model -> Element Msg
+chooseCropButton model =
+    Input.button (paletButtonStyle 1 1 0)
+        { onPress = Just ChooseCrop
+        , label = el [ centerX, centerY ] (text <| "Crop")
+        }
+
+
+chooseNatureButton : Model -> Element Msg
+chooseNatureButton model =
+    Input.button (paletButtonStyle 0 0.8 0)
+        { onPress = Just ChooseNature
+        , label = el [ centerX, centerY ] (text <| "Nature")
+        }
+
+
+chooseUnoccupiedButton : Model -> Element Msg
+chooseUnoccupiedButton model =
+    Input.button (paletButtonStyle 0.1 0.1 0.1)
+        { onPress = Just ChooseUnoccupied
+        , label = el [ centerX, centerY ] (text <| "Unoccupied")
+        }
+
+
+paletButtonStyle r g b =
+    [ Background.color (Element.rgb r g b)
+    , width (px 100)
+    , Font.color (Element.rgb 0.5 0.5 0.5)
+    , paddingXY 8 8
+    , Font.size buttonFontSize
+    ]
+
+
 
 --onMouseClick : Attribute Msg
 --onMouseClick =
@@ -278,7 +333,7 @@ currentDensity : Model -> Float
 currentDensity model =
     let
         population =
-            Conway.occupied model.cellMap |> toFloat
+            Conway.numberOccupied model.cellMap |> toFloat
 
         capacity =
             gridWidth * gridWidth |> toFloat
@@ -300,8 +355,14 @@ cellrenderer =
     , cellColorizer =
         \state ->
             case state of
-                Occupied ->
+                Crop ->
+                    Color.rgb 1 1 0
+
+                City ->
                     Color.rgb 0 0 1
+
+                Nature ->
+                    Color.rgb 0 1 0
 
                 Unoccupied ->
                     Color.rgb 0 0 0
