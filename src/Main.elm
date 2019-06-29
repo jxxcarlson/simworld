@@ -10,16 +10,23 @@ import Browser
 import CellGrid exposing (CellGrid)
 import CellGrid.Render exposing (CellRenderer)
 import Color
-import Conway exposing (State(..))
 import Element exposing (..)
 import Element.Background as Background
-import Element.Font as Font
+import Element.Font as Font exposing (wordSpacing)
 import Element.Input as Input
 import Html exposing (Html)
 import Html.Events.Extra.Mouse as Mouse
 import Random
 import Time exposing (Posix)
 import TypedSvg.Types exposing (Fill(..))
+import WorldGrid exposing (State(..))
+
+
+type alias WorldChange =
+    { crops : Int
+    , cities : Int
+    , nature : Int
+    }
 
 
 tickInterval : Float
@@ -71,6 +78,7 @@ type alias Model =
     , cellMap : CellGrid State
     , message : String
     , chosenState : State
+    , worldChange : WorldChange
     }
 
 
@@ -122,6 +130,7 @@ init flags =
       , cellMap = initialCellGrid initialSeed initialDensity
       , message = "Click to make cell."
       , chosenState = City
+      , worldChange = { crops = 0, cities = 0, nature = 0 }
       }
     , Cmd.none
     )
@@ -129,11 +138,42 @@ init flags =
 
 initialCellGrid : Int -> Float -> CellGrid State
 initialCellGrid seed density =
-    Conway.emptyGrid gridWidth gridWidth
+    WorldGrid.emptyGrid gridWidth gridWidth
 
 
 subscriptions model =
     Time.every tickInterval Tick
+
+
+updateWordChange : Maybe State -> State -> WorldChange -> WorldChange
+updateWordChange maybeSelectedCell chosenState worldChange =
+    if maybeSelectedCell == Just chosenState then
+        case chosenState of
+            Crop ->
+                { worldChange | crops = worldChange.crops + 1 }
+
+            City ->
+                { worldChange | cities = worldChange.cities + 1 }
+
+            Nature ->
+                { worldChange | nature = worldChange.nature + 1 }
+
+            Unoccupied ->
+                worldChange
+
+    else
+        case chosenState of
+            Crop ->
+                { worldChange | crops = worldChange.crops - 1 }
+
+            City ->
+                { worldChange | cities = worldChange.cities - 1 }
+
+            Nature ->
+                { worldChange | nature = worldChange.nature - 1 }
+
+            Unoccupied ->
+                worldChange
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -159,7 +199,7 @@ update msg model =
                     ( { model | seedString = str, seed = seed_ }, Cmd.none )
 
         Step ->
-            ( { model | counter = model.counter + 1, cellMap = Conway.updateCells model.cellMap }, Cmd.none )
+            ( { model | counter = model.counter + 1, cellMap = WorldGrid.updateCells model.cellMap }, Cmd.none )
 
         Tick t ->
             case model.appState == Running of
@@ -207,10 +247,14 @@ update msg model =
                     let
                         message =
                             "(i,j) = (" ++ String.fromInt i ++ ", " ++ String.fromInt j ++ ")"
+
+                        maybeSelectedCell =
+                            CellGrid.cellAtMatrixIndex ( i, j ) model.cellMap
                     in
                     ( { model
                         | message = message
-                        , cellMap = Conway.changeState model.chosenState ( i, j ) model.cellMap
+                        , worldChange = updateWordChange maybeSelectedCell model.chosenState model.worldChange
+                        , cellMap = WorldGrid.toggleState model.chosenState ( i, j ) model.cellMap
                       }
                     , Cmd.none
                     )
@@ -247,7 +291,7 @@ mainColumn : Model -> Element Msg
 mainColumn model =
     column mainColumnStyle
         [ column [ centerX, spacing 20 ]
-            [ title "Conway's Game of Life"
+            [ title "WorldGrid's Game of Life"
             , row [ centerX, spacing 40 ]
                 [ CellGrid.Render.renderAsHtml gridDisplayWidth gridDisplayWidth cellrenderer model.cellMap
                     |> Element.html
@@ -333,7 +377,7 @@ currentDensity : Model -> Float
 currentDensity model =
     let
         population =
-            Conway.numberOccupied model.cellMap |> toFloat
+            WorldGrid.numberOccupied model.cellMap |> toFloat
 
         capacity =
             gridWidth * gridWidth |> toFloat
