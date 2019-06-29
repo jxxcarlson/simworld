@@ -147,7 +147,7 @@ subscriptions model =
 
 updateWordChange : Maybe State -> State -> WorldChange -> WorldChange
 updateWordChange maybeSelectedCell chosenState worldChange =
-    if maybeSelectedCell == Just chosenState then
+    if maybeSelectedCell /= Just chosenState then
         case chosenState of
             Crop ->
                 { worldChange | crops = worldChange.crops + 1 }
@@ -319,9 +319,9 @@ mainColumn model =
 palette : Model -> Element Msg
 palette model =
     column [ spacing 10, paddingXY 40 0 ]
-        [ chooseCityButton model
-        , chooseCropButton model
-        , chooseNatureButton model
+        [ row [ spacing 10, Font.color (Element.rgb 1 1 1) ] [ chooseCityButton model, text <| String.fromInt model.worldChange.cities ]
+        , row [ spacing 10, Font.color (Element.rgb 1 1 1) ] [ chooseCropButton model, text <| String.fromInt model.worldChange.crops ]
+        , row [ spacing 10, Font.color (Element.rgb 1 1 1) ] [ chooseNatureButton model, text <| String.fromInt model.worldChange.nature ]
         , chooseUnoccupiedButton model
         ]
 
